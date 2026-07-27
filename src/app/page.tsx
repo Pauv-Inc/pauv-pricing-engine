@@ -15,7 +15,7 @@ import {
 import { computeSuggestion, defaultConfig, fmtPrice } from "@/lib/pricer";
 
 // v8: VADER removed (LLM is the only sentiment engine).
-const CONFIG_KEY = "pauv_pricer_config_v13";
+const CONFIG_KEY = "pauv_pricer_config_v14";
 const TEMPLATES_KEY = "pauv_pricer_templates_v1";
 
 function fmtInt(n: number | null): string {

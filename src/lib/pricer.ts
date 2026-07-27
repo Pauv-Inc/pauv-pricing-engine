@@ -28,32 +28,31 @@ import { PLATFORMS, type Platform, type PlatformRule, type WikipediaRule, type P
 export const ANCHOR_FOLLOWERS = 100_000;
 
 export function defaultConfig(): PricerConfig {
-  // minFollowers is the inclusion threshold — at/below it a profile is excluded
-  // and floored. To let regular people list themselves, these sit BELOW what an
-  // average personal account has (IG ~150-250, X <~100, TikTok <~100, YouTube
-  // ~0-50), so a typical person clears the bar and gets a real (small) price.
-  // priceAt100k = 2.00 keeps the ticket's anchor.
-  const rule = (weight: number, minFollowers: number): PlatformRule => ({
+  // Defaults are the admin-tuned "v3" model. minFollowers is the inclusion
+  // threshold — at/below it a profile is excluded and floored — kept low so a
+  // typical personal account (IG ~150-250, X <~100, TikTok <~100, YouTube ~0-50)
+  // still clears the bar. priceAt100k and weight are the per-platform anchors.
+  const rule = (minFollowers: number, priceAt100k: number, weight: number): PlatformRule => ({
     minFollowers,
-    priceAt100k: 2.0,
+    priceAt100k,
     weight,
   });
   return {
     rules: {
-      // weight is now a per-platform multiplier (1 = full ticket price adds to reach).
-      x: rule(1, 50),
-      instagram: rule(1, 100),
-      tiktok: rule(1, 50),
-      youtube: rule(1, 25),
+      // weight is a per-platform multiplier on the price that adds to reach.
+      x: rule(50, 2.0, 1.35),
+      instagram: rule(100, 1.9, 0.9),
+      tiktok: rule(50, 1.75, 0.5),
+      youtube: rule(25, 2.0, 1.25),
     },
     // Wikipedia pageviews — the SOLE reach signal for no-socials figures
     // (actors, directors, politicians), so it's anchored richer than a follower:
     // a pageview (someone actively reading about you) is a stronger signal than a
     // passive follow. Below 2k/30d contributes nothing; 100k/30d ≈ $10, then the
-    // curve saturates. Calibrated so a heavy-coverage figure (Nolan, ~1.78M/30d)
-    // lands ≈ $39 ≈ his real pauv price; a big star (~235k/30d) ≈ $19.
-    wikipedia: { minViews: 2000, anchorViews: 100_000, priceAtAnchor: 10.0, weight: 1 },
-    sentimentWeight: 0.25, // tilt strength: ±25% at full ±1 sentiment
+    // curve saturates. Calibrated so a heavy-coverage figure (Nolan, ~1.9M/30d)
+    // lands ≈ $45 ≈ his real pauv price.
+    wikipedia: { minViews: 2000, anchorViews: 100_000, priceAtAnchor: 10.0, weight: 1.15 },
+    sentimentWeight: 0.2, // tilt strength: ±20% at full ±1 sentiment
     // Sentiment only tilts once reach reaches this price — below it, scraped text
     // has no effect (a person needs real presence before sentiment matters).
     sentimentMinReach: 5,

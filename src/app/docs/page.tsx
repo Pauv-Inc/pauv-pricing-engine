@@ -197,15 +197,15 @@ included  =  count present AND strictly above the signal's minimum`}>
           <pre className="font-mono text-xs text-emerald-400 bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 overflow-x-auto whitespace-pre-wrap">{`priceFloor             = 0.01      // $ at/below a signal's minimum
 ANCHOR_FOLLOWERS       = 100000    // fixed anchor of the follower curve
 
-rules = {                          // per platform
-  x:         { minFollowers: 50,  priceAt100k: 2.00, weight: 1 },
-  instagram: { minFollowers: 100, priceAt100k: 2.00, weight: 1 },
-  tiktok:    { minFollowers: 50,  priceAt100k: 2.00, weight: 1 },
-  youtube:   { minFollowers: 25,  priceAt100k: 2.00, weight: 1 },
+rules = {                          // per platform (admin-tuned "v3" defaults)
+  x:         { minFollowers: 50,  priceAt100k: 2.00, weight: 1.35 },
+  instagram: { minFollowers: 100, priceAt100k: 1.90, weight: 0.90 },
+  tiktok:    { minFollowers: 50,  priceAt100k: 1.75, weight: 0.50 },
+  youtube:   { minFollowers: 25,  priceAt100k: 2.00, weight: 1.25 },
 }
-wikipedia = { minViews: 2000, anchorViews: 100000, priceAtAnchor: 10.00, weight: 1 }
+wikipedia = { minViews: 2000, anchorViews: 100000, priceAtAnchor: 10.00, weight: 1.15 }
 
-sentimentWeight        = 0.25      // ± tilt at full ±1 sentiment
+sentimentWeight        = 0.20      // ± tilt at full ±1 sentiment
 sentimentMinReach      = 5.00      // sentiment applies only when reach >= this
 wikipediaSocialDamping = 0.60      // d: how much socials discount Wikipedia (0..1)
 saturateTop            = true      // true = diminishing returns above anchor; false = linear/unbounded`}</pre>
