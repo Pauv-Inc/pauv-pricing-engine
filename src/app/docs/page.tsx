@@ -171,6 +171,13 @@ included  =  count present AND strictly above the signal's minimum`}>
                 the top of the real traded market — with no clamp doing the work. There is no max price at all;
                 the curve shape, not a ceiling, keeps the top sane.
               </p>
+              <p className="text-xs text-zinc-500">
+                <span className="text-zinc-300">Toggle (<span className="font-mono">saturateTop</span>).</span> The
+                &ldquo;Top of the curve&rdquo; switch controls this per config. <span className="text-zinc-200">On</span>{" "}
+                (default) = the saturating curve above. <span className="text-zinc-200">Off</span> = pure linear
+                extrapolation, unbounded — the same account climbs far higher ($996 vs. $14 at 50M followers). It
+                recalculates instantly from data already entered, so you can compare the two without re-fetching.
+              </p>
             </Step>
 
             <Step n={5} title="You set the final price" formula="final = whatever you type">
@@ -181,6 +188,71 @@ included  =  count present AND strictly above the signal's minimum`}>
               </p>
             </Step>
           </div>
+        </Section>
+
+        <Section id="weights" title="Why these default weights">
+          <p>
+            Each platform&apos;s <span className="text-zinc-200">weight</span> encodes one judgment:{" "}
+            <span className="text-zinc-200">how much a follower there is worth</span> to a person-trading index.
+            That&apos;s the product of two things — <span className="text-zinc-200">how hard it is to reach 100k
+            followers</span> on that platform (rarer = each follower means more) and the{" "}
+            <span className="text-zinc-200">cultural / tradeable relevance</span> of that audience (mass influence
+            vs. a niche one). The <span className="font-mono">price @ 100k</span> anchor carries part of this too;
+            weight is the final multiplier.
+          </p>
+          <div className="rounded-lg border border-zinc-700 bg-zinc-900/50 overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-[10px] uppercase tracking-wide text-zinc-500 border-b border-zinc-800 bg-zinc-900">
+                  <th className="px-3 py-2 font-medium">Platform</th>
+                  <th className="px-3 py-2 font-medium">Reaching 100k</th>
+                  <th className="px-3 py-2 font-medium">Cultural relevance</th>
+                  <th className="px-3 py-2 font-medium text-right">Weight</th>
+                </tr>
+              </thead>
+              <tbody className="text-zinc-400">
+                <tr className="border-b border-zinc-800/60 align-top">
+                  <td className="px-3 py-2 text-zinc-200">X</td>
+                  <td className="px-3 py-2">Hard — but news/viral moments accelerate it</td>
+                  <td className="px-3 py-2">Highest — real-time influence, drives the news cycle</td>
+                  <td className="px-3 py-2 text-right font-mono text-emerald-400">1.35×</td>
+                </tr>
+                <tr className="border-b border-zinc-800/60 align-top">
+                  <td className="px-3 py-2 text-zinc-200">YouTube</td>
+                  <td className="px-3 py-2">Moderate — 100k is the Silver Play Button milestone</td>
+                  <td className="px-3 py-2">High — deep engagement, monetized creators</td>
+                  <td className="px-3 py-2 text-right font-mono text-emerald-400">1.25×</td>
+                </tr>
+                <tr className="border-b border-zinc-800/60 align-top">
+                  <td className="px-3 py-2 text-zinc-200">Instagram</td>
+                  <td className="px-3 py-2">Easier — visual virality, mass adoption</td>
+                  <td className="px-3 py-2">High-mid — broad lifestyle reach, somewhat diluted</td>
+                  <td className="px-3 py-2 text-right font-mono text-emerald-400">0.90×</td>
+                </tr>
+                <tr className="border-b border-zinc-800/60 align-top">
+                  <td className="px-3 py-2 text-zinc-200">LinkedIn</td>
+                  <td className="px-3 py-2">Hardest — no viral engine, professional audience; 100k is elite</td>
+                  <td className="px-3 py-2">Lowest — professional / B2B, not mass-cultural</td>
+                  <td className="px-3 py-2 text-right font-mono text-emerald-400">0.80×</td>
+                </tr>
+                <tr className="align-top">
+                  <td className="px-3 py-2 text-zinc-200">TikTok</td>
+                  <td className="px-3 py-2">Easiest — the algorithm pushes rapid follower growth</td>
+                  <td className="px-3 py-2">Lower — younger, high churn, less per-follower value</td>
+                  <td className="px-3 py-2 text-right font-mono text-emerald-400">0.50×</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-zinc-500">
+            <span className="text-zinc-300">LinkedIn is the paradox:</span> the hardest platform to reach 100k, yet
+            the lowest cultural relevance for a celebrity index — the two forces offset to a moderate{" "}
+            <span className="font-mono">0.80×</span>. <span className="text-zinc-300">TikTok</span> is the mirror
+            image: easy to amass followers, lower tradeable value each, so <span className="font-mono">0.50×</span>.
+            Instagram and TikTok also carry a slightly lower <span className="font-mono">price @ 100k</span>{" "}
+            ($1.90 / $1.75) on top of their weight. These are the tuned <span className="text-zinc-200">v3</span>{" "}
+            defaults — every one is an admin dial; set a weight to 0 to drop a platform entirely.
+          </p>
         </Section>
 
         <Section id="spec" title="Exact spec — for reimplementation">
@@ -202,6 +274,7 @@ rules = {                          // per platform (admin-tuned "v3" defaults)
   instagram: { minFollowers: 100, priceAt100k: 1.90, weight: 0.90 },
   tiktok:    { minFollowers: 50,  priceAt100k: 1.75, weight: 0.50 },
   youtube:   { minFollowers: 25,  priceAt100k: 2.00, weight: 1.25 },
+  linkedin:  { minFollowers: 100, priceAt100k: 2.00, weight: 0.80 },  // manual entry (no follower API)
 }
 wikipedia = { minViews: 2000, anchorViews: 100000, priceAtAnchor: 10.00, weight: 1.15 }
 
@@ -328,8 +401,8 @@ function suggestPrice(followers, wikiViews, sentiment) {
                   Per platform, the <span className="text-zinc-200">inclusion threshold</span>: at or below it a
                   profile is excluded from the blend (and would be floor-priced alone). Because the goal is to
                   let anyone list themselves, the defaults sit below what an average personal account has
-                  (X 50, Instagram 100, TikTok 50, YouTube 25), so a regular person clears the bar and gets a
-                  real, small price rather than being locked out.
+                  (X 50, Instagram 100, TikTok 50, YouTube 25, LinkedIn 100), so a regular person clears the
+                  bar and gets a real, small price rather than being locked out.
                 </Param>
                 <Param name="Price @ 100k">
                   Per platform. The suggested price for exactly 100,000 followers — the anchor that sets the
@@ -346,16 +419,31 @@ function suggestPrice(followers, wikiViews, sentiment) {
                   The flat price for anyone below a platform&apos;s minimum. The ticket uses $0.01.
                 </Param>
                 <Param name="Sentiment strength">
-                  How hard sentiment tilts the reach price: at <span className="font-mono">0.25</span>, fully
-                  positive news is <span className="font-mono">+25%</span> and fully negative is{" "}
-                  <span className="font-mono">−25%</span>. Set it to 0 to price purely on reach. It only applies
+                  How hard sentiment tilts the reach price: at <span className="font-mono">0.20</span> (the v3
+                  default), fully positive news is <span className="font-mono">+20%</span> and fully negative{" "}
+                  <span className="font-mono">−20%</span>. Set it to 0 to price purely on reach. It only applies
                   once reach clears the threshold — sentiment refines a price, it doesn&apos;t create one.
+                </Param>
+                <Param name="Applies above reach">
+                  The reach threshold (<span className="font-mono">$5</span> default) sentiment must clear before it
+                  tilts at all — a proxy for real presence. Below it, or with no reach, scraped text is ignored.
+                </Param>
+                <Param name="Discount if they have socials">
+                  How much existing social reach discounts the Wikipedia contribution (<span className="font-mono">0.60</span>{" "}
+                  default). 0 = pure additive; higher = a heavily-followed person&apos;s Wikipedia counts for less
+                  (its fame is already in their followers). A no-socials figure&apos;s Wikipedia always counts fully.
+                </Param>
+                <Param name="Top of the curve">
+                  Soft cap <span className="font-mono">on</span> (default) = diminishing returns above 100k;{" "}
+                  <span className="font-mono">off</span> = pure linear, unbounded. No hard $ ceiling either way.
                 </Param>
               </tbody>
             </table>
           </div>
           <p className="text-xs text-zinc-500 pt-2">
-            The config is saved to your browser automatically, so an admin&apos;s anchors persist between visits.
+            The config is saved to your browser automatically, so any tweaks persist between visits. The deployed
+            app ships with the tuned <span className="text-zinc-300">v3</span> model as its baked-in default;{" "}
+            <span className="text-zinc-200">Reset</span> returns to it at any time.
           </p>
         </Section>
 
@@ -415,7 +503,7 @@ wikiContribution = wikiRaw · dampingFactor`}</pre>
         <Section id="data" title="Follower data & APIs">
           <ul className="list-disc list-inside space-y-2 text-sm">
             <li>
-              <span className="text-zinc-200 font-medium">All four platforms have follower-lookup APIs.</span>{" "}
+              <span className="text-zinc-200 font-medium">Four of five platforms have follower-lookup APIs.</span>{" "}
               <span className="font-mono text-xs">/api/x-followers</span>,{" "}
               <span className="font-mono text-xs">/api/instagram-followers</span>, and{" "}
               <span className="font-mono text-xs">/api/tiktok-followers</span> all go through{" "}
@@ -424,6 +512,15 @@ wikiContribution = wikiRaw · dampingFactor`}</pre>
               <span className="text-zinc-200">YouTube Data API</span>. Paste a handle, click Fetch, get the count.
               All run <span className="text-zinc-200">server-side only</span> — keys never reach the browser,
               never <span className="font-mono text-xs">NEXT_PUBLIC_</span>.
+            </li>
+            <li>
+              <span className="text-zinc-200 font-medium">LinkedIn is manual-entry (optional).</span> There&apos;s
+              no usable public follower API (LinkedIn blocks scraping and has no open API), so you type the count
+              in — leave it blank to skip it. Its default weight is <span className="font-mono">0.80×</span>:
+              LinkedIn is the <em>hardest</em> platform to reach 100k followers (no viral engine, a professional
+              audience), but a LinkedIn following is <em>lower</em> cultural/tradeable relevance for a person-index
+              than X/YouTube — those two forces offset to a moderate weight. Set the weight to 0 to ignore it
+              entirely.
             </li>
             <li>
               <span className="text-zinc-200 font-medium">Mock-first.</span> Until each key is set in{" "}
@@ -488,6 +585,12 @@ wikiContribution = wikiRaw · dampingFactor`}</pre>
             cheap and fast — all of a person&apos;s items score in one call, and it runs automatically when you
             Fetch news; the per-item breakdown shows underneath. Needs an LLM key server-side (until then
             sentiment stays neutral and the price is reach-only).
+          </p>
+          <p className="text-xs text-zinc-500">
+            <span className="text-zinc-300">Deterministic.</span> Scoring runs at{" "}
+            <span className="font-mono">temperature 0</span> with a fixed seed, so the <em>same</em> headlines
+            always produce the <em>same</em> score — the price won&apos;t drift between runs. It moves only when
+            the underlying news genuinely changes (a new article published), which is real signal, not noise.
           </p>
           <p className="text-xs text-zinc-500">
             <span className="text-zinc-300">Provider-switchable via env, no code change.</span> Anthropic is the

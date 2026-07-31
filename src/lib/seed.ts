@@ -13,7 +13,7 @@ export interface ExampleProfile {
   id: string;
   name: string;
   industry: string;
-  followers: Record<Platform, number>;
+  followers: Partial<Record<Platform, number>>; // omitted platforms default to 0/blank
   marketNPSI: number | null; // real live pauv price, shown as reference
   query: string;
   snippets: string[];

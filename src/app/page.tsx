@@ -15,8 +15,7 @@ import {
 import { computeSuggestion, defaultConfig, fmtPrice } from "@/lib/pricer";
 
 // v8: VADER removed (LLM is the only sentiment engine).
-const CONFIG_KEY = "pauv_pricer_config_v14";
-const TEMPLATES_KEY = "pauv_pricer_templates_v1";
+const CONFIG_KEY = "pauv_pricer_config_v15";
 
 function fmtInt(n: number | null): string {
   if (n == null || !Number.isFinite(n)) return "";
@@ -26,11 +25,15 @@ function fmtInt(n: number | null): string {
 type FollowerMap = Record<Platform, number | null>;
 type HandleMap = Record<Platform, string>;
 
+// Built from PLATFORMS so adding a platform (e.g. LinkedIn) flows through everywhere.
 function emptyFollowers(): FollowerMap {
-  return { x: null, instagram: null, tiktok: null, youtube: null };
+  return Object.fromEntries(PLATFORMS.map((p) => [p, null])) as FollowerMap;
 }
 function emptyHandles(): HandleMap {
-  return { x: "", instagram: "", tiktok: "", youtube: "" };
+  return Object.fromEntries(PLATFORMS.map((p) => [p, ""])) as HandleMap;
+}
+function emptyFetchMsg(): Record<Platform, string> {
+  return Object.fromEntries(PLATFORMS.map((p) => [p, ""])) as Record<Platform, string>;
 }
 
 // Defensively merge a stored/loaded config onto the current defaults so a
@@ -50,11 +53,6 @@ export default function PricerPage() {
   const [cfg, setCfg] = useState<PricerConfig>(defaultConfig());
   const [loaded, setLoaded] = useState(false);
 
-  // Saved config "models" — named PricerConfig snapshots you can reload.
-  const [templates, setTemplates] = useState<Record<string, PricerConfig>>({});
-  const [templateName, setTemplateName] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState("");
-
   // Application state (the person being added).
   const [name, setName] = useState("");
   const [handles, setHandles] = useState<HandleMap>(emptyHandles);
@@ -63,9 +61,7 @@ export default function PricerPage() {
   const [finalPrice, setFinalPrice] = useState("");
   const [finalEdited, setFinalEdited] = useState(false);
   const [refPrice, setRefPrice] = useState<number | null>(null);
-  const [fetchMsg, setFetchMsg] = useState<Record<Platform, string>>({
-    x: "", instagram: "", tiktok: "", youtube: "",
-  });
+  const [fetchMsg, setFetchMsg] = useState<Record<Platform, string>>(emptyFetchMsg);
 
   // LLM (entity-targeted) sentiment: overall score + per-item breakdown. Set by
   // Fetch news; cleared when the text changes (stale). Drives the sentiment tilt.
@@ -77,13 +73,11 @@ export default function PricerPage() {
   const [wikiTitle, setWikiTitle] = useState("");
   const [wikiMsg, setWikiMsg] = useState("");
 
-  // ---- Load / persist config + templates ----
+  // ---- Load / persist config ----
   useEffect(() => {
     try {
       const raw = localStorage.getItem(CONFIG_KEY);
       if (raw) setCfg(mergeConfig(JSON.parse(raw)));
-      const t = localStorage.getItem(TEMPLATES_KEY);
-      if (t) setTemplates(JSON.parse(t));
     } catch { /* ignore */ }
     setLoaded(true);
   }, []);
@@ -92,38 +86,6 @@ export default function PricerPage() {
     if (!loaded) return;
     try { localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); } catch { /* ignore */ }
   }, [cfg, loaded]);
-
-  useEffect(() => {
-    if (!loaded) return;
-    try { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates)); } catch { /* ignore */ }
-  }, [templates, loaded]);
-
-  // Save the current config as a named model; load / delete saved ones.
-  const saveTemplate = useCallback(() => {
-    const nm = (templateName.trim() || selectedTemplate).trim();
-    if (!nm) return;
-    setTemplates((t) => ({ ...t, [nm]: cfg }));
-    setSelectedTemplate(nm);
-    setTemplateName("");
-  }, [templateName, selectedTemplate, cfg]);
-
-  const loadTemplate = useCallback((nm: string) => {
-    setSelectedTemplate(nm);
-    setTemplates((t) => {
-      if (t[nm]) setCfg(mergeConfig(t[nm]));
-      return t;
-    });
-  }, []);
-
-  const deleteTemplate = useCallback(() => {
-    if (!selectedTemplate) return;
-    setTemplates((t) => {
-      const next = { ...t };
-      delete next[selectedTemplate];
-      return next;
-    });
-    setSelectedTemplate("");
-  }, [selectedTemplate]);
 
   const result = useMemo(
     () => computeSuggestion(followers, cfg, llm?.overall ?? null, wikiViews),
@@ -163,17 +125,14 @@ export default function PricerPage() {
     setCfg((c) => ({ ...c, sentimentWeight: Math.max(0, v) }));
 
   const loadExample = useCallback((p: ExampleProfile) => {
+    const guess = p.name.replace(/\s+/g, "").toLowerCase();
     setName(p.name);
-    setFollowers({ ...p.followers });
-    setHandles({
-      x: p.name.replace(/\s+/g, "").toLowerCase(),
-      instagram: p.name.replace(/\s+/g, "").toLowerCase(),
-      tiktok: "", youtube: "",
-    });
+    setFollowers({ ...emptyFollowers(), ...p.followers });
+    setHandles({ ...emptyHandles(), x: guess, instagram: guess });
     setSentimentText(p.snippets.join("\n"));
     setRefPrice(p.marketNPSI);
     setFinalEdited(false);
-    setFetchMsg({ x: "", instagram: "", tiktok: "", youtube: "" });
+    setFetchMsg(emptyFetchMsg());
     setWikiViews(null); setWikiTitle(""); setWikiMsg("");
   }, []);
 
@@ -191,13 +150,14 @@ export default function PricerPage() {
     setRefPrice(null);
     setFinalEdited(false);
     setFinalPrice("");
-    setFetchMsg({ x: "", instagram: "", tiktok: "", youtube: "" });
+    setFetchMsg(emptyFetchMsg());
     setWikiViews(null); setWikiTitle(""); setWikiMsg("");
   }, []);
 
   // Attempt a live follower fetch (works once tokens are configured server-side;
   // otherwise the route returns a clear "configure token" message).
   const fetchFollowers = useCallback(async (plat: Platform) => {
+    if (!API_PLATFORMS[plat]) return; // no follower API (e.g. LinkedIn) — manual entry only
     const handle = handles[plat].trim();
     if (!handle) { setFetchMsg((m) => ({ ...m, [plat]: "Enter a handle first" })); return; }
     setFetchMsg((m) => ({ ...m, [plat]: "Fetching…" }));
@@ -282,7 +242,7 @@ export default function PricerPage() {
   const fetchAll = useCallback(async () => {
     const jobs: Promise<unknown>[] = [];
     for (const plat of PLATFORMS) {
-      if (handles[plat].trim()) jobs.push(fetchFollowers(plat));
+      if (API_PLATFORMS[plat] && handles[plat].trim()) jobs.push(fetchFollowers(plat));
     }
     if (name.trim()) {
       jobs.push(fetchWikipedia());
@@ -335,44 +295,6 @@ export default function PricerPage() {
                 className="text-[11px] rounded border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-2 py-1 text-zinc-400 transition-colors">
                 Reset
               </button>
-            </div>
-
-            {/* Saved models — reusable config presets */}
-            <div className="mb-4 rounded-md border border-zinc-800 bg-zinc-950/40 p-2.5">
-              <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-zinc-500 mb-1.5">
-                Saved models
-                <InfoTooltip text="Save the whole config (all platform anchors, weights, Wikipedia, sentiment, floor) as a named model, then reload it any time — no re-adjusting. Stored in this browser." />
-              </div>
-              <div className="flex gap-1 mb-1">
-                <select
-                  value={selectedTemplate}
-                  onChange={(e) => { if (e.target.value) loadTemplate(e.target.value); else setSelectedTemplate(""); }}
-                  className="flex-1 min-w-0 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                >
-                  <option value="">{Object.keys(templates).length ? "Load a saved model…" : "No saved models yet"}</option>
-                  {Object.keys(templates).map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-                <button onClick={deleteTemplate} disabled={!selectedTemplate}
-                  className="shrink-0 text-[11px] rounded border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 px-2 py-1 text-zinc-400 transition-colors"
-                  title="Delete the selected model">
-                  ✕
-                </button>
-              </div>
-              <div className="flex gap-1">
-                <input
-                  value={templateName}
-                  onChange={(e) => setTemplateName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") saveTemplate(); }}
-                  placeholder={selectedTemplate ? `Overwrite “${selectedTemplate}” or name a new one` : "Name this model"}
-                  className="flex-1 min-w-0 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                />
-                <button onClick={saveTemplate}
-                  className="shrink-0 text-[11px] rounded border border-violet-600/50 bg-violet-600/20 hover:bg-violet-600/30 px-3 py-1 text-violet-200 transition-colors">
-                  Save
-                </button>
-              </div>
             </div>
 
             <div className="mb-4 flex gap-4">
@@ -581,8 +503,8 @@ export default function PricerPage() {
             </div>
 
             {/* Per-platform rows. Followers drive the price; the handle is only
-                the lookup key for the Fetch control (X + Instagram). TikTok and
-                YouTube have no API, so they're follower-entry only. */}
+                the lookup key for the Fetch control. X / Instagram / TikTok /
+                YouTube have follower APIs; LinkedIn has none (manual entry). */}
             <div className="space-y-2">
               <div className="hidden md:grid grid-cols-[90px_150px_1fr_110px] gap-3 text-[10px] uppercase tracking-wide text-zinc-500 px-1">
                 <span>Platform</span><span>Followers</span><span>Look up by handle</span><span className="text-right">Adds to reach</span>

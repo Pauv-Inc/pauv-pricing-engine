@@ -7,7 +7,7 @@
 // YouTube are configurable extras (the "forum-weight" idea). Reddit is
 // deliberately NOT here — follower counts aren't a meaningful Reddit metric; it
 // feeds sentiment instead (see SENTIMENT_SOURCES).
-export const PLATFORMS = ["x", "instagram", "tiktok", "youtube"] as const;
+export const PLATFORMS = ["x", "instagram", "tiktok", "youtube", "linkedin"] as const;
 export type Platform = (typeof PLATFORMS)[number];
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
@@ -15,23 +15,28 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   instagram: "Instagram",
   tiktok: "TikTok",
   youtube: "YouTube",
+  linkedin: "LinkedIn",
 };
 
 // Which reach platforms have a real follower-lookup API wired.
 // X + Instagram (SCRUM-21), TikTok (Apify), YouTube (YouTube Data API).
+// LinkedIn has NO follower API (no public API + ToS/anti-scraping), so it's
+// manual-entry only — you type the follower count in.
 export const API_PLATFORMS: Record<Platform, boolean> = {
   x: true,
   instagram: true,
   tiktok: true,
   youtube: true,
+  linkedin: false,
 };
 
-// Maps a platform to its follower-lookup route.
+// Maps a platform to its follower-lookup route ("" = no API, manual entry).
 export const FOLLOWER_ROUTES: Record<Platform, string> = {
   x: "/api/x-followers",
   instagram: "/api/instagram-followers",
   tiktok: "/api/tiktok-followers",
   youtube: "/api/youtube-followers",
+  linkedin: "",
 };
 
 // Sources the sentiment scraper pulls from. YouTube comments require

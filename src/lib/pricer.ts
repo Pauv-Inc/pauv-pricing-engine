@@ -44,6 +44,11 @@ export function defaultConfig(): PricerConfig {
       instagram: rule(100, 1.9, 0.9),
       tiktok: rule(50, 1.75, 0.5),
       youtube: rule(25, 2.0, 1.25),
+      // LinkedIn: hardest platform to reach 100k followers (no viral engine,
+      // professional audience), but lowest cultural/tradeable relevance per
+      // follower for a celebrity index — those offset to a moderate 0.8 weight.
+      // No follower API, so it's manual-entry only.
+      linkedin: rule(100, 2.0, 0.8),
     },
     // Wikipedia pageviews — the SOLE reach signal for no-socials figures
     // (actors, directors, politicians), so it's anchored richer than a follower:
