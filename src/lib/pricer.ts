@@ -29,9 +29,12 @@ export const ANCHOR_FOLLOWERS = 100_000;
 
 export function defaultConfig(): PricerConfig {
   // Defaults are the admin-tuned "v3" model. minFollowers is the inclusion
-  // threshold — at/below it a profile is excluded and floored — kept low so a
-  // typical personal account (IG ~150-250, X <~100, TikTok <~100, YouTube ~0-50)
-  // still clears the bar. priceAt100k and weight are the per-platform anchors.
+  // threshold — at/below it a profile floors ($0.01) and is excluded from reach.
+  // It's set slightly ABOVE each platform's average user, so an ordinary account
+  // doesn't earn a real price — you need above-average reach to clear the bar.
+  // Averages (~): X/IG/TikTok ~150-250 followers → 500; YouTube subs are rarer
+  // (median <10, most channels <100) → 250; LinkedIn ~900 connections → 1000.
+  // priceAt100k and weight are the per-platform anchors.
   const rule = (minFollowers: number, priceAt100k: number, weight: number): PlatformRule => ({
     minFollowers,
     priceAt100k,
@@ -40,23 +43,24 @@ export function defaultConfig(): PricerConfig {
   return {
     rules: {
       // weight is a per-platform multiplier on the price that adds to reach.
-      x: rule(50, 2.0, 1.35),
-      instagram: rule(100, 1.9, 0.9),
-      tiktok: rule(50, 1.75, 0.5),
-      youtube: rule(25, 2.0, 1.25),
+      x: rule(500, 2.0, 1.35),
+      instagram: rule(500, 1.9, 0.9),
+      tiktok: rule(500, 1.75, 0.5),
+      youtube: rule(250, 2.0, 1.25),
       // LinkedIn: hardest platform to reach 100k followers (no viral engine,
       // professional audience), but lowest cultural/tradeable relevance per
       // follower for a celebrity index — those offset to a moderate 0.8 weight.
-      // No follower API, so it's manual-entry only.
-      linkedin: rule(100, 2.0, 0.8),
+      // Min 1000 sits just above the ~900-connection average user. No follower
+      // API, so it's manual-entry only.
+      linkedin: rule(1000, 2.0, 0.8),
     },
     // Wikipedia pageviews — the SOLE reach signal for no-socials figures
     // (actors, directors, politicians), so it's anchored richer than a follower:
     // a pageview (someone actively reading about you) is a stronger signal than a
-    // passive follow. Below 2k/30d contributes nothing; 100k/30d ≈ $10, then the
-    // curve saturates. Calibrated so a heavy-coverage figure (Nolan, ~1.9M/30d)
-    // lands ≈ $45 ≈ his real pauv price.
-    wikipedia: { minViews: 2000, anchorViews: 100_000, priceAtAnchor: 10.0, weight: 1.15 },
+    // passive follow. Below 5k/30d (~167/day) contributes nothing — filters
+    // barely-read stub articles; 100k/30d ≈ $10, then the curve saturates.
+    // Calibrated so a heavy-coverage figure (Nolan, ~1.9M/30d) lands ≈ $45.
+    wikipedia: { minViews: 5000, anchorViews: 100_000, priceAtAnchor: 10.0, weight: 1.15 },
     sentimentWeight: 0.2, // tilt strength: ±20% at full ±1 sentiment
     // Sentiment only tilts once reach reaches this price — below it, scraped text
     // has no effect (a person needs real presence before sentiment matters).

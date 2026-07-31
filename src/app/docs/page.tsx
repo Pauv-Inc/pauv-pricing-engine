@@ -270,13 +270,13 @@ included  =  count present AND strictly above the signal's minimum`}>
 ANCHOR_FOLLOWERS       = 100000    // fixed anchor of the follower curve
 
 rules = {                          // per platform (admin-tuned "v3" defaults)
-  x:         { minFollowers: 50,  priceAt100k: 2.00, weight: 1.35 },
-  instagram: { minFollowers: 100, priceAt100k: 1.90, weight: 0.90 },
-  tiktok:    { minFollowers: 50,  priceAt100k: 1.75, weight: 0.50 },
-  youtube:   { minFollowers: 25,  priceAt100k: 2.00, weight: 1.25 },
-  linkedin:  { minFollowers: 100, priceAt100k: 2.00, weight: 0.80 },  // manual entry (no follower API)
+  x:         { minFollowers: 500,  priceAt100k: 2.00, weight: 1.35 },
+  instagram: { minFollowers: 500,  priceAt100k: 1.90, weight: 0.90 },
+  tiktok:    { minFollowers: 500,  priceAt100k: 1.75, weight: 0.50 },
+  youtube:   { minFollowers: 250,  priceAt100k: 2.00, weight: 1.25 },
+  linkedin:  { minFollowers: 1000, priceAt100k: 2.00, weight: 0.80 },  // manual entry (no follower API)
 }
-wikipedia = { minViews: 2000, anchorViews: 100000, priceAtAnchor: 10.00, weight: 1.15 }
+wikipedia = { minViews: 5000, anchorViews: 100000, priceAtAnchor: 10.00, weight: 1.15 }
 
 sentimentWeight        = 0.20      // ± tilt at full ±1 sentiment
 sentimentMinReach      = 5.00      // sentiment applies only when reach >= this
@@ -399,10 +399,11 @@ function suggestPrice(followers, wikiViews, sentiment) {
               <tbody>
                 <Param name="Min followers">
                   Per platform, the <span className="text-zinc-200">inclusion threshold</span>: at or below it a
-                  profile is excluded from the blend (and would be floor-priced alone). Because the goal is to
-                  let anyone list themselves, the defaults sit below what an average personal account has
-                  (X 50, Instagram 100, TikTok 50, YouTube 25, LinkedIn 100), so a regular person clears the
-                  bar and gets a real, small price rather than being locked out.
+                  profile floors at $0.01 and is excluded from reach. The defaults sit <span className="text-zinc-200">slightly
+                  above each platform&apos;s average user</span> (X 500, Instagram 500, TikTok 500, YouTube 250,
+                  LinkedIn 1000), so an ordinary account doesn&apos;t earn a real price — you need above-average
+                  reach to clear the bar. YouTube&apos;s is lower because subscribers are rarer/harder to earn than
+                  a follow; LinkedIn&apos;s is higher because the average user already has ~900 connections.
                 </Param>
                 <Param name="Price @ 100k">
                   Per platform. The suggested price for exactly 100,000 followers — the anchor that sets the
