@@ -142,11 +142,19 @@ async function scoreOpenAICompatible(name: string, texts: string[], apiKey: stri
   return (JSON.parse(raw)?.scores ?? []) as Scored[];
 }
 
+// Env values pasted into a dashboard (Vercel etc.) often pick up stray wrapping
+// quotes or trailing whitespace/newlines — which make a model id or key silently
+// wrong ("model does not exist"). Normalize before use.
+function cleanEnv(v: string | undefined): string | undefined {
+  if (v == null) return undefined;
+  return v.trim().replace(/^["']|["']$/g, "").trim();
+}
+
 export async function POST(request: Request) {
   const provider = resolveProvider();
-  const model = process.env.SENTIMENT_MODEL || DEFAULTS[provider].model || process.env.LLM_MODEL || "";
-  const baseURL = process.env.SENTIMENT_BASE_URL || DEFAULTS[provider].baseURL || process.env.LLM_BASE_URL;
-  const apiKey = resolveApiKey(provider);
+  const model = cleanEnv(process.env.SENTIMENT_MODEL || DEFAULTS[provider].model || process.env.LLM_MODEL) || "";
+  const baseURL = cleanEnv(process.env.SENTIMENT_BASE_URL || DEFAULTS[provider].baseURL || process.env.LLM_BASE_URL);
+  const apiKey = cleanEnv(resolveApiKey(provider));
 
   if (!apiKey) {
     const keyHint: Record<Provider, string> = {
