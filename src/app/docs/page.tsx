@@ -604,6 +604,69 @@ wikiContribution = wikiRaw · dampingFactor`}</pre>
           </p>
         </Section>
 
+        <Section id="discover" title="Auto-discovery (the in-app agent)">
+          <p>
+            <span className="font-mono text-xs">/api/discover</span> resolves follower counts autonomously by
+            driving a <span className="text-zinc-200">real Chromium</span> (Playwright) that stays logged into your
+            accounts and runs on <span className="text-zinc-200">this machine&apos;s IP</span>. Given a handle or
+            URL it opens the profile, reads the count from the page, and — if that fails — screenshots it and a
+            vision model reads the number off the image. Given a <em>name</em>, it searches each platform to resolve
+            the handle first (X name-search needs you logged into X; otherwise it&apos;s skipped, not guessed).
+          </p>
+          <ul className="list-disc list-inside space-y-1.5 text-sm">
+            <li><span className="text-zinc-200">TikTok</span> — <span className="font-mono">followerCount</span> from the page JSON (no login needed).</li>
+            <li><span className="text-zinc-200">Instagram</span> — the follower count from the profile meta (needs you logged in), name→handle via IG search.</li>
+            <li><span className="text-zinc-200">X</span> — intercepts the profile&apos;s own API response for the exact count.</li>
+            <li><span className="text-zinc-200">YouTube</span> — the official Data API (no browser, exact subscriber count); a name does a channel search first. Needs <span className="font-mono">YOUTUBE_API_KEY</span>.</li>
+            <li><span className="text-zinc-200">Vision fallback</span> — a screenshot read by a multimodal model (Gemini free tier) when parsing misses.</li>
+          </ul>
+          <p className="text-xs text-zinc-500">
+            <span className="text-zinc-300">Why it runs locally.</span> The platforms block datacenter IPs (Vercel,
+            AWS…) behind login walls — so discovery only works where the server has a <span className="text-zinc-200">residential
+            IP + your logged-in browser profile</span>: your own machine, or the box behind{" "}
+            <span className="font-mono">price.pauv.com</span>. Set it up once:
+          </p>
+          <pre className="font-mono text-xs text-emerald-400 bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 overflow-x-auto whitespace-pre-wrap">{`npm run pw:install     # download Chromium (first time)
+npm run pw:login       # log into IG / X / TikTok once — session persists
+npm run dev            # the "Discover" button now resolves counts`}</pre>
+          <p className="text-xs text-zinc-500">
+            These are unofficial page shapes and will drift over time — expect the occasional one-line fix
+            (a selector, or the X query id). It automates public lookups you could do by hand; keep it internal
+            and mind each platform&apos;s ToS.
+          </p>
+        </Section>
+
+        <Section id="integration" title="Connecting the PAUV website">
+          <p>
+            When someone lists themselves on PAUV, the site gets a suggested initial price by calling one endpoint
+            on this pricer — <span className="font-mono text-xs">POST /api/price</span>. Give it a name and/or
+            handles; it auto-discovers followers (unless you pass them), runs the v3 model, and returns the price.
+          </p>
+          <pre className="font-mono text-xs text-emerald-400 bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 overflow-x-auto whitespace-pre-wrap">{`POST https://price.pauv.com/api/price
+  x-pauv-secret: <shared secret>
+  { "name": "Ava Nakamura",
+    "handles": { "instagram": "avanakamura", "tiktok": "avanakamura" },
+    "wikipediaViews": 0 }
+
+→ { "suggested": 3.42, "reachPrice": 3.42, "hasSignal": true,
+    "followers": { "instagram": 3900000, "tiktok": 8400000, ... },
+    "perPlatform": [ ... ] }`}</pre>
+          <p className="text-xs text-zinc-500">
+            <span className="text-zinc-300">How the connection works.</span> Because discovery must run on a
+            residential IP, the pricer lives on your own machine — and a <span className="text-zinc-200">Cloudflare
+            Tunnel</span> (free) exposes that local server at a stable HTTPS domain,{" "}
+            <span className="font-mono">price.pauv.com</span>, with no open ports or public IP. PAUV&apos;s backend
+            then calls it <span className="text-zinc-200">server-to-server</span> (no CORS, no browser) with a
+            shared <span className="font-mono">x-pauv-secret</span> so only PAUV can reach it. It&apos;s a single
+            authenticated HTTP call — about as simple as an integration gets.
+          </p>
+          <ul className="list-disc list-inside space-y-1.5 text-xs text-zinc-500">
+            <li>Run the pricer locally, then <span className="font-mono">cloudflared tunnel --url http://localhost:3001</span> (or a named tunnel bound to <span className="font-mono">price.pauv.com</span>).</li>
+            <li>Set <span className="font-mono">PRICE_API_SECRET</span> here and on PAUV&apos;s caller; keep the machine + browser logged in.</li>
+            <li>Prefer server-to-server; if the browser must call directly, set <span className="font-mono">PRICE_ALLOWED_ORIGIN</span> to the PAUV origin.</li>
+          </ul>
+        </Section>
+
         <div className="pt-4 border-t border-zinc-800">
           <Link href="/" className="text-sm text-violet-400 hover:text-violet-300 transition-colors">← Back to the pricer</Link>
         </div>

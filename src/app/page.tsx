@@ -257,6 +257,46 @@ export default function PricerPage() {
     }
   }, [name, handles, fetchFollowers, fetchWikipedia, fetchNews]);
 
+  // ---- Discover: the in-app Playwright agent (/api/discover) resolves follower
+  // counts by driving a real logged-in browser on this machine. Runs locally.
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverMsg, setDiscoverMsg] = useState("");
+  const discover = useCallback(async () => {
+    if (!name.trim() && !PLATFORMS.some((p) => handles[p].trim())) {
+      setDiscoverMsg("Enter a name or a handle first");
+      return;
+    }
+    setDiscovering(true);
+    setDiscoverMsg("Discovering… (driving your logged-in browser)");
+    try {
+      const resp = await fetch("/api/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), handles }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error || `Error ${resp.status}`);
+      const counts: Record<string, number> = data.results ?? {};
+      const resolved: Record<string, string> = data.resolvedHandles ?? {};
+      if (Object.keys(counts).length) {
+        setFollowers((f) => ({ ...f, ...Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, Number(v)])) }));
+      }
+      if (Object.keys(resolved).length) {
+        setHandles((h) => ({ ...h, ...Object.fromEntries(Object.entries(resolved).map(([k, v]) => [k, String(v)])) }));
+      }
+      const got = Object.entries(counts).map(([k, v]) => `${PLATFORM_LABELS[k as Platform]} ${Number(v).toLocaleString()} (${data.methods?.[k] ?? "?"})`);
+      const failed = Object.keys(data.errors ?? {});
+      setDiscoverMsg(
+        (got.length ? `Filled ${got.join(", ")}` : "No counts resolved") +
+        (failed.length ? ` · failed: ${failed.join(", ")}` : "")
+      );
+    } catch (e) {
+      setDiscoverMsg(e instanceof Error ? e.message : "Discover failed");
+    } finally {
+      setDiscovering(false);
+    }
+  }, [name, handles]);
+
   if (!loaded) {
     return (
       <div className="h-screen bg-zinc-950 text-zinc-500 flex items-center justify-center">Loading…</div>
@@ -496,10 +536,17 @@ export default function PricerPage() {
                   className="shrink-0 rounded-md bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-3.5 py-1.5 text-sm font-semibold text-white transition-colors">
                   {fetchingAll ? "Fetching…" : "Fetch all"}
                 </button>
+                <button onClick={discover} disabled={discovering}
+                  title="Resolve follower counts by driving your own logged-in browser (local only — needs npm run pw:login first)"
+                  className="shrink-0 rounded-md border border-emerald-600/50 bg-emerald-600/15 hover:bg-emerald-600/25 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 text-sm font-semibold text-emerald-300 transition-colors">
+                  {discovering ? "Discovering…" : "Discover"}
+                </button>
               </div>
               <p className="mt-1 text-[10px] text-zinc-500">
-                Looks up followers (for any handles entered), Wikipedia pageviews, and news — then scores sentiment. Runs every signal at once.
+                <span className="text-zinc-400">Fetch all</span>: followers (handles entered) + Wikipedia + news → sentiment.{" "}
+                <span className="text-emerald-500/80">Discover</span>: auto-resolves follower counts via your logged-in browser (local).
               </p>
+              {discoverMsg && <p className="mt-0.5 text-[10px] text-zinc-500">{discoverMsg}</p>}
             </div>
 
             {/* Per-platform rows. Followers drive the price; the handle is only

@@ -22,6 +22,11 @@ yarn-error.log*
 # env files
 .env*.local
 
+# playwright browser profile (holds your logged-in session cookies — NEVER commit)
+/.pw-profile
+/test-results
+/playwright-report
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
