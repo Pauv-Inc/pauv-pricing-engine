@@ -18,10 +18,9 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   linkedin: "LinkedIn",
 };
 
-// Which reach platforms have a real follower-lookup API wired.
-// X + Instagram (SCRUM-21), TikTok (Apify), YouTube (YouTube Data API).
-// LinkedIn has NO follower API (no public API + ToS/anti-scraping), so it's
-// manual-entry only — you type the follower count in.
+// Which platforms accept a handle for lookup. X / Instagram / TikTok resolve via
+// the Discover agent (browser); YouTube has its own free API route (per-row Fetch).
+// LinkedIn has no lookup at all — manual entry only.
 export const API_PLATFORMS: Record<Platform, boolean> = {
   x: true,
   instagram: true,
@@ -30,11 +29,12 @@ export const API_PLATFORMS: Record<Platform, boolean> = {
   linkedin: false,
 };
 
-// Maps a platform to its follower-lookup route ("" = no API, manual entry).
+// Per-row Fetch route. Only YouTube has a standalone route now (the free YouTube
+// Data API); X / Instagram / TikTok are resolved by the Discover agent instead.
 export const FOLLOWER_ROUTES: Record<Platform, string> = {
-  x: "/api/x-followers",
-  instagram: "/api/instagram-followers",
-  tiktok: "/api/tiktok-followers",
+  x: "",
+  instagram: "",
+  tiktok: "",
   youtube: "/api/youtube-followers",
   linkedin: "",
 };

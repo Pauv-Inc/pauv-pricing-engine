@@ -504,15 +504,13 @@ wikiContribution = wikiRaw · dampingFactor`}</pre>
         <Section id="data" title="Follower data & APIs">
           <ul className="list-disc list-inside space-y-2 text-sm">
             <li>
-              <span className="text-zinc-200 font-medium">Four of five platforms have follower-lookup APIs.</span>{" "}
-              <span className="font-mono text-xs">/api/x-followers</span>,{" "}
-              <span className="font-mono text-xs">/api/instagram-followers</span>, and{" "}
-              <span className="font-mono text-xs">/api/tiktok-followers</span> all go through{" "}
-              <span className="text-zinc-200">Apify</span> (pay-per-use);{" "}
-              <span className="font-mono text-xs">/api/youtube-followers</span> uses the{" "}
-              <span className="text-zinc-200">YouTube Data API</span>. Paste a handle, click Fetch, get the count.
-              All run <span className="text-zinc-200">server-side only</span> — keys never reach the browser,
-              never <span className="font-mono text-xs">NEXT_PUBLIC_</span>.
+              <span className="text-zinc-200 font-medium">Follower counts come from the Discover agent.</span>{" "}
+              X, Instagram, and TikTok are resolved by <span className="font-mono text-xs">/api/discover</span> —
+              the local Playwright agent driving your logged-in browser (see the Auto-discovery section above) —
+              from a pasted handle or profile URL. No Apify, no paid scraper, no key.{" "}
+              <span className="font-mono text-xs">/api/youtube-followers</span> uses the free{" "}
+              <span className="text-zinc-200">YouTube Data API</span> (its own per-row Fetch, or via Discover).
+              All run <span className="text-zinc-200">server-side only</span> — keys never reach the browser.
             </li>
             <li>
               <span className="text-zinc-200 font-medium">LinkedIn is manual-entry (optional).</span> There&apos;s
@@ -524,20 +522,9 @@ wikiContribution = wikiRaw · dampingFactor`}</pre>
               entirely.
             </li>
             <li>
-              <span className="text-zinc-200 font-medium">Mock-first.</span> Until each key is set in{" "}
-              <span className="font-mono text-xs">.env.local</span> the Fetch button returns a clear
-              &ldquo;configure key&rdquo; message and you enter the count by hand — no code change to go live.
-              Keys: <span className="font-mono text-xs">APIFY_API_TOKEN</span> (X + Instagram + TikTok) and{" "}
-              <span className="font-mono text-xs">YOUTUBE_API_KEY</span>.
-            </li>
-            <li>
-              <span className="text-zinc-200 font-medium">Cost note.</span> YouTube Data API is{" "}
-              <span className="text-zinc-200">free</span> within a 10,000-unit/day quota (1 unit per follower
-              lookup). X, Instagram, and TikTok go through <span className="text-zinc-200">Apify</span>{" "}
-              (usage-billed, cents per lookup) — none has a usable free follower API. <span className="text-zinc-300">X
-              used to run on the official X API v2, which costs $200–$5,000/month for a follower count; routing it
-              through Apify removes that recurring cost</span> (the official implementation is preserved in git
-              history). At the ~10k-listing scale, Apify is the dominant cost; the LLM is ~$40, everything else free.
+              <span className="text-zinc-200 font-medium">Cost.</span> Discovery is <span className="text-zinc-200">free</span>{" "}
+              (your own browser + IP). YouTube is free within its 10,000-unit/day quota (1 unit per lookup). The only
+              paid piece is the LLM sentiment scorer — and that&apos;s a few dollars, or free on Groq/Gemini.
             </li>
             <li>
               <span className="text-zinc-200 font-medium">Reddit is a sentiment source, not reach.</span>{" "}
@@ -606,33 +593,39 @@ wikiContribution = wikiRaw · dampingFactor`}</pre>
 
         <Section id="discover" title="Auto-discovery (the in-app agent)">
           <p>
-            <span className="font-mono text-xs">/api/discover</span> resolves follower counts autonomously by
-            driving a <span className="text-zinc-200">real Chromium</span> (Playwright) that stays logged into your
-            accounts and runs on <span className="text-zinc-200">this machine&apos;s IP</span>. Given a handle or
-            URL it opens the profile, reads the count from the page, and — if that fails — screenshots it and a
-            vision model reads the number off the image. Given a <em>name</em>, it searches each platform to resolve
-            the handle first (X name-search needs you logged into X; otherwise it&apos;s skipped, not guessed).
+            <span className="font-mono text-xs">/api/discover</span> resolves follower counts from a{" "}
+            <span className="text-zinc-200">pasted handle or profile URL</span> per platform. It drives a{" "}
+            <span className="text-zinc-200">real Chromium</span> (Playwright) that stays logged into your accounts
+            and runs on <span className="text-zinc-200">this machine&apos;s IP</span>: it opens that exact profile,
+            reads the count from the page, and — if that fails — screenshots it and a vision model reads the number
+            off the image. <span className="text-zinc-300">Handle/URL only</span> — there&apos;s no name-search,
+            because searching by name grabbed wrong/fake accounts for anyone without a clear real profile.
           </p>
           <ul className="list-disc list-inside space-y-1.5 text-sm">
-            <li><span className="text-zinc-200">TikTok</span> — <span className="font-mono">followerCount</span> from the page JSON (no login needed).</li>
-            <li><span className="text-zinc-200">Instagram</span> — the follower count from the profile meta (needs you logged in), name→handle via IG search.</li>
-            <li><span className="text-zinc-200">X</span> — intercepts the profile&apos;s own API response for the exact count.</li>
-            <li><span className="text-zinc-200">YouTube</span> — the official Data API (no browser, exact subscriber count); a name does a channel search first. Needs <span className="font-mono">YOUTUBE_API_KEY</span>.</li>
-            <li><span className="text-zinc-200">Vision fallback</span> — a screenshot read by a multimodal model (Gemini free tier) when parsing misses.</li>
+            <li><span className="text-zinc-200">TikTok</span> — reads the on-page follower count element, then the page&apos;s <span className="font-mono">followerCount</span> JSON. No login needed.</li>
+            <li><span className="text-zinc-200">Instagram</span> — hits IG&apos;s own profile API through your logged-in session (exact count), then the page meta. Needs you logged into IG.</li>
+            <li><span className="text-zinc-200">X</span> — intercepts the profile&apos;s own API response, or reads the count off the header. <span className="text-zinc-300">No X login needed</span> — X keeps profile pages public (only its feed/search are gated).</li>
+            <li><span className="text-zinc-200">YouTube</span> — the official Data API (no browser, exact subscriber count) from a handle / @handle / channel URL. Needs <span className="font-mono">YOUTUBE_API_KEY</span>.</li>
+            <li><span className="text-zinc-200">Vision fallback</span> — for IG/TikTok/X, a screenshot read by a multimodal model (Gemini free tier) when the above miss.</li>
           </ul>
           <p className="text-xs text-zinc-500">
+            <span className="text-zinc-300">Everything is by handle / profile URL</span> — paste one per platform
+            row and hit Discover. There&apos;s no name-search (that grabbed wrong/fake accounts); for someone with
+            no real profile you just leave the row blank.
+          </p>
+          <p className="text-xs text-zinc-500">
             <span className="text-zinc-300">Why it runs locally.</span> The platforms block datacenter IPs (Vercel,
-            AWS…) behind login walls — so discovery only works where the server has a <span className="text-zinc-200">residential
-            IP + your logged-in browser profile</span>: your own machine, or the box behind{" "}
+            AWS…) — so discovery only works where the server has a <span className="text-zinc-200">residential IP</span>{" "}
+            (and, for Instagram, your logged-in session): your own machine, or the box behind{" "}
             <span className="font-mono">price.pauv.com</span>. Set it up once:
           </p>
           <pre className="font-mono text-xs text-emerald-400 bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 overflow-x-auto whitespace-pre-wrap">{`npm run pw:install     # download Chromium (first time)
-npm run pw:login       # log into IG / X / TikTok once — session persists
+npm run pw:login       # log into Instagram (X + TikTok need no login) — session persists
 npm run dev            # the "Discover" button now resolves counts`}</pre>
           <p className="text-xs text-zinc-500">
             These are unofficial page shapes and will drift over time — expect the occasional one-line fix
-            (a selector, or the X query id). It automates public lookups you could do by hand; keep it internal
-            and mind each platform&apos;s ToS.
+            (a selector). It automates public lookups you could do by hand; keep it internal and mind each
+            platform&apos;s ToS.
           </p>
         </Section>
 

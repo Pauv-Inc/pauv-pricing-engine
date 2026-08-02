@@ -2,23 +2,23 @@ import { NextResponse } from "next/server";
 import { readCountFromImage, parseCount } from "@/lib/vision";
 
 // ============================================================
-// POST /api/discover   { name?, handles?: { x, instagram, tiktok, linkedin } }
+// POST /api/discover   { handles?: { x, instagram, tiktok, youtube } }
 // ============================================================
-// The in-app "agent": drives a REAL Chromium (Playwright) that stays logged into
-// your accounts and runs on THIS machine's IP. For each platform it opens the
-// profile, reads the follower count from the page (DOM/JSON), and — if that
-// fails — screenshots it and a vision model reads the number off the image.
+// The in-app "agent": for each pasted handle / profile URL, it drives a REAL
+// Chromium (Playwright) — logged into your accounts, on THIS machine's IP —
+// opens that exact profile, reads the follower count from the page (DOM/JSON),
+// and if that fails, screenshots it and a vision model reads the number off the
+// image. YouTube uses the official Data API instead of the browser.
 //
-// This only works where the server has a residential IP + your logged-in
-// browser profile (i.e. your own machine / the box behind price.pauv.com), not a
-// datacenter. Log in once with `npm run pw:login` before first use.
+// Handle/URL only (no name-search — that grabbed wrong accounts). Works only
+// where the server has a residential IP + your logged-in browser profile (your
+// own machine / the box behind price.pauv.com), not a datacenter. Log in once
+// with `npm run pw:login`.
 // ============================================================
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-const IG_APP_ID = "936619743392459";
 
 // Pull a handle out of a pasted profile URL, else strip @ / trailing slash.
 function normalizeHandle(v: string | undefined): string {
@@ -59,9 +59,18 @@ async function grabTikTok(ctx: import("playwright").BrowserContext, handle: stri
   const page = await ctx.newPage();
   try {
     await page.goto(`https://www.tiktok.com/@${handle}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    // Method 1: the rendered count element (e.g. "204.5M") — robust when the
+    // followerCount JSON isn't in the served HTML.
+    await page.waitForSelector('[data-e2e="followers-count"]', { timeout: 8000 }).catch(() => {});
+    const domTxt = await page
+      .evaluate(() => document.querySelector('[data-e2e="followers-count"]')?.textContent?.trim() || null)
+      .catch(() => null);
+    if (domTxt) { const c = parseCount(domTxt); if (c != null) return { count: c, method: "dom", handle }; }
+    // Method 2: followerCount in the page's rehydration JSON.
     const html = await page.content();
     const m = html.match(/"followerCount":\s*(\d+)/);
     if (m) return { count: parseInt(m[1], 10), method: "json", handle };
+    // Method 3: read it off a screenshot.
     const shot = (await page.screenshot()).toString("base64");
     const c = await readCountFromImage(shot, "TikTok");
     return { count: c, method: c != null ? "vision" : "none", handle };
@@ -72,12 +81,28 @@ async function grabInstagram(ctx: import("playwright").BrowserContext, handle: s
   const page = await ctx.newPage();
   try {
     await page.goto(`https://www.instagram.com/${handle}/`, { waitUntil: "domcontentloaded", timeout: 30000 });
-    // og:description reads "1,234 Followers, 56 Following, 78 Posts — ..."
+    // Method 1: IG's own profile API (exact, uses your logged-in session).
+    const apiCount = await page
+      .evaluate(async (h) => {
+        try {
+          const r = await fetch(`/api/v1/users/web_profile_info/?username=${encodeURIComponent(h)}`, {
+            headers: { "x-ig-app-id": "936619743392459" },
+          });
+          if (!r.ok) return null;
+          const j = await r.json();
+          const c = j?.data?.user?.edge_followed_by?.count;
+          return typeof c === "number" ? c : null;
+        } catch { return null; }
+      }, handle)
+      .catch(() => null);
+    if (typeof apiCount === "number") return { count: apiCount, method: "api", handle };
+    // Method 2: og:description meta ("1,234 Followers, 56 Following, ...").
     const og = await page
       .$eval('meta[property="og:description"]', (el) => (el as HTMLMetaElement).content)
       .catch(() => null);
     const m = og?.match(/([\d.,]+[KMB]?)\s+Followers/i);
     if (m) { const c = parseCount(m[1]); if (c != null) return { count: c, method: "meta", handle }; }
+    // Method 3: read it off a screenshot (the "AI agent" fallback).
     const shot = (await page.screenshot()).toString("base64");
     const c = await readCountFromImage(shot, "Instagram");
     return { count: c, method: c != null ? "vision" : "none", handle };
@@ -114,121 +139,32 @@ async function grabX(ctx: import("playwright").BrowserContext, handle: string): 
   } finally { await page.close(); }
 }
 
-// Name → Instagram handle, using IG's own search from a logged-in same-origin fetch.
-async function igSearchHandle(ctx: import("playwright").BrowserContext, name: string): Promise<string | null> {
-  const page = await ctx.newPage();
-  try {
-    await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
-    const users: { username: string; verified: boolean }[] = await page
-      .evaluate(
-        async ([q, appId]) => {
-          const r = await fetch(`/web/search/topsearch/?context=blended&query=${encodeURIComponent(q)}`, {
-            headers: { "x-ig-app-id": appId },
-          });
-          if (!r.ok) return [] as { username: string; verified: boolean }[];
-          const j = await r.json();
-          return (j.users || []).map((u: { user: { username: string; is_verified: boolean } }) => ({
-            username: u.user.username,
-            verified: u.user.is_verified,
-          }));
-        },
-        [name, IG_APP_ID] as const
-      )
-      .catch(() => [] as { username: string; verified: boolean }[]);
-    const pick = users.find((u) => u.verified) || users[0];
-    return pick?.username || null;
-  } finally { await page.close(); }
-}
-
-// Name → X handle via X's People search. Search is LOGIN-GATED, so if the People
-// results don't render (logged out) we return null instead of guessing.
-async function xSearchHandle(ctx: import("playwright").BrowserContext, name: string): Promise<string | null> {
-  // Logged-out X search shows unrelated "suggested" users → wrong results. Only
-  // trust name-search when actually logged in; otherwise skip (enter the handle).
-  const cookies = await ctx.cookies("https://x.com").catch(() => []);
-  if (!cookies.some((c) => c.name === "auth_token")) return null;
-  const page = await ctx.newPage();
-  try {
-    await page.goto(`https://x.com/search?q=${encodeURIComponent(name)}&src=typed_query&f=user`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30000,
-    });
-    const ok = await page.waitForSelector('[data-testid="UserCell"]', { timeout: 9000 }).then(() => true).catch(() => false);
-    if (!ok) return null; // login wall / no results
-    const handle = await page
-      .evaluate(() => {
-        const cell = document.querySelector('[data-testid="UserCell"]');
-        // The handle link is href="/<handle>" (single segment); read it, not stray @text.
-        const link = cell?.querySelector('a[href^="/"][role="link"]') as HTMLAnchorElement | null;
-        const fromHref = link?.getAttribute("href")?.match(/^\/(\w{1,15})$/)?.[1];
-        if (fromHref) return fromHref;
-        return (cell?.textContent || "").match(/@(\w{1,15})/)?.[1] ?? null;
-      })
-      .catch(() => null);
-    return handle && /^\w{1,15}$/.test(handle) ? handle : null;
-  } finally { await page.close(); }
-}
-
-// Name → TikTok handle via TikTok's search. Reads the first profile (/@handle) link.
-async function ttSearchHandle(ctx: import("playwright").BrowserContext, name: string): Promise<string | null> {
-  const page = await ctx.newPage();
-  try {
-    await page.goto(`https://www.tiktok.com/search/user?q=${encodeURIComponent(name)}`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30000,
-    });
-    await page.waitForSelector('a[href*="/@"]', { timeout: 9000 }).catch(() => {});
-    const handle = await page
-      .evaluate(() => {
-        for (const a of Array.from(document.querySelectorAll('a[href*="/@"]'))) {
-          const m = (a.getAttribute("href") || "").match(/\/@([\w.]+)(?:$|\?|\/)/);
-          if (m) return m[1];
-        }
-        return null;
-      })
-      .catch(() => null);
-    return handle && /^[\w.]{1,30}$/.test(handle) ? handle : null;
-  } finally { await page.close(); }
-}
-
-// YouTube via the official Data API (no browser). A provided handle/URL/channelId
-// costs 1 unit; resolving from a name costs a 100-unit channel search first.
+// YouTube via the official Data API (no browser). Takes a handle / @handle / URL /
+// channelId (the /api/youtube-followers route resolves all of those). 1 unit.
 // Skips silently if YOUTUBE_API_KEY isn't set.
-async function grabYouTube(name: string, handle: string, origin: string): Promise<Grab | null> {
-  const key = process.env.YOUTUBE_API_KEY;
-  if (!key) return null;
-  let query = handle;
-  let title = handle;
-  if (!query && name) {
-    const sUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&maxResults=1&q=${encodeURIComponent(name)}&key=${key}`;
-    const sr = await fetch(sUrl, { cache: "no-store" });
-    const sd = (await sr.json()) as { items?: { id?: { channelId?: string }; snippet?: { channelTitle?: string } }[] };
-    const ch = sd.items?.[0];
-    query = ch?.id?.channelId || "";
-    title = ch?.snippet?.channelTitle || query;
-    if (!query) return { count: null, method: "none", handle: "" };
-  }
-  if (!query) return null;
-  const r = await fetch(new URL(`/api/youtube-followers?username=${encodeURIComponent(query)}`, origin), { cache: "no-store" });
+async function grabYouTube(handle: string, origin: string): Promise<Grab | null> {
+  if (!process.env.YOUTUBE_API_KEY || !handle) return null;
+  const r = await fetch(new URL(`/api/youtube-followers?username=${encodeURIComponent(handle)}`, origin), { cache: "no-store" });
   const d = (await r.json()) as { followersCount?: number; username?: string; fullName?: string; error?: string };
-  if (d.error || d.followersCount == null) return { count: null, method: "none", handle: d.fullName || title };
-  return { count: d.followersCount, method: "api", handle: d.username || d.fullName || title };
+  if (d.error || d.followersCount == null) return { count: null, method: "none", handle: d.fullName || handle };
+  return { count: d.followersCount, method: "api", handle: d.username || d.fullName || handle };
 }
 
 export async function POST(request: Request) {
-  let body: { name?: string; handles?: Partial<Record<"x" | "instagram" | "tiktok" | "youtube" | "linkedin", string>> };
+  let body: { handles?: Partial<Record<"x" | "instagram" | "tiktok" | "youtube" | "linkedin", string>> };
   try { body = await request.json(); } catch { return NextResponse.json({ error: "invalid JSON" }, { status: 400 }); }
-  const name = (body.name || "").trim();
   const handles = body.handles || {};
+  // Handle/URL only — the exact account the user pasted. No name-search (which
+  // grabbed wrong/fake accounts for people without a clear real profile).
   const igHandle = normalizeHandle(handles.instagram);
   const ttHandle = normalizeHandle(handles.tiktok);
   const xHandle = normalizeHandle(handles.x);
   const ytHandle = normalizeHandle(handles.youtube);
 
-  const needBrowser = !!(igHandle || ttHandle || xHandle || name); // name → IG search
-  const needYouTube = !!(ytHandle || name);
+  const needBrowser = !!(igHandle || ttHandle || xHandle);
+  const needYouTube = !!ytHandle;
   if (!needBrowser && !needYouTube) {
-    return NextResponse.json({ error: "Provide a name or handles for x/instagram/tiktok/youtube" }, { status: 400 });
+    return NextResponse.json({ error: "Paste a handle or profile URL for at least one platform (x / instagram / tiktok / youtube)" }, { status: 400 });
   }
 
   const results: Record<string, number> = {};
@@ -238,7 +174,7 @@ export async function POST(request: Request) {
 
   // YouTube via the official API — parallel, independent of the browser.
   const ytJob = needYouTube
-    ? grabYouTube(name, ytHandle, request.url)
+    ? grabYouTube(ytHandle, request.url)
         .then((g) => {
           if (!g) return; // no key → skip
           if (g.count != null) { results.youtube = g.count; methods.youtube = g.method; }
@@ -247,8 +183,8 @@ export async function POST(request: Request) {
         .catch((e) => { errors.youtube = String(e?.message || e); })
     : Promise.resolve();
 
-  // Instagram / X / TikTok via the browser agent. Browser failure is per-platform,
-  // not fatal — YouTube can still resolve.
+  // Instagram / X / TikTok via the browser agent, each on the exact pasted handle.
+  // Browser failure is per-platform, not fatal — YouTube can still resolve.
   const pwJob = needBrowser
     ? withProfile(async (ctx) => {
         const run = (platform: "instagram" | "tiktok" | "x", fn: (h: string) => Promise<Grab>, handle: string) =>
@@ -260,20 +196,14 @@ export async function POST(request: Request) {
             })
             .catch((e) => { errors[platform] = String(e?.message || e); });
 
-        // Resolve any missing handles from the name (in parallel), then grab.
-        const [ig, tt, xh] = await Promise.all([
-          igHandle || (name ? igSearchHandle(ctx, name).catch(() => null) : null),
-          ttHandle || (name ? ttSearchHandle(ctx, name).catch(() => null) : null),
-          xHandle || (name ? xSearchHandle(ctx, name).catch(() => null) : null),
-        ]);
         const jobs: Promise<void>[] = [];
-        if (ig) jobs.push(run("instagram", (h) => grabInstagram(ctx, h), ig));
-        if (tt) jobs.push(run("tiktok", (h) => grabTikTok(ctx, h), tt));
-        if (xh) jobs.push(run("x", (h) => grabX(ctx, h), xh));
+        if (igHandle) jobs.push(run("instagram", (h) => grabInstagram(ctx, h), igHandle));
+        if (ttHandle) jobs.push(run("tiktok", (h) => grabTikTok(ctx, h), ttHandle));
+        if (xHandle) jobs.push(run("x", (h) => grabX(ctx, h), xHandle));
         await Promise.all(jobs);
       }).catch((e) => {
         const msg = `browser unavailable — run npm run pw:install / pw:login (${e instanceof Error ? e.message : e})`;
-        if (igHandle || name) errors.instagram = msg;
+        if (igHandle) errors.instagram = msg;
         if (ttHandle) errors.tiktok = msg;
         if (xHandle) errors.x = msg;
       })

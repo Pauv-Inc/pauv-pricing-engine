@@ -235,35 +235,13 @@ export default function PricerPage() {
     }
   }, [name]);
 
-  // One-click: fetch every available signal for this person concurrently —
-  // followers for each platform with a handle, Wikipedia pageviews, and news
-  // (which auto-scores sentiment). Each sub-fetch owns its own status message.
-  const [fetchingAll, setFetchingAll] = useState(false);
-  const fetchAll = useCallback(async () => {
-    const jobs: Promise<unknown>[] = [];
-    for (const plat of PLATFORMS) {
-      if (API_PLATFORMS[plat] && handles[plat].trim()) jobs.push(fetchFollowers(plat));
-    }
-    if (name.trim()) {
-      jobs.push(fetchWikipedia());
-      jobs.push(fetchNews());
-    }
-    if (!jobs.length) return;
-    setFetchingAll(true);
-    try {
-      await Promise.allSettled(jobs);
-    } finally {
-      setFetchingAll(false);
-    }
-  }, [name, handles, fetchFollowers, fetchWikipedia, fetchNews]);
-
   // ---- Discover: the in-app Playwright agent (/api/discover) resolves follower
   // counts by driving a real logged-in browser on this machine. Runs locally.
   const [discovering, setDiscovering] = useState(false);
   const [discoverMsg, setDiscoverMsg] = useState("");
   const discover = useCallback(async () => {
-    if (!name.trim() && !PLATFORMS.some((p) => handles[p].trim())) {
-      setDiscoverMsg("Enter a name or a handle first");
+    if (!PLATFORMS.some((p) => handles[p].trim())) {
+      setDiscoverMsg("Paste a handle or profile URL in a platform row first");
       return;
     }
     setDiscovering(true);
@@ -272,7 +250,7 @@ export default function PricerPage() {
       const resp = await fetch("/api/discover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), handles }),
+        body: JSON.stringify({ handles }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data?.error || `Error ${resp.status}`);
@@ -295,7 +273,25 @@ export default function PricerPage() {
     } finally {
       setDiscovering(false);
     }
-  }, [name, handles]);
+  }, [handles]);
+
+  // One-click: resolve follower counts (Discover agent) + Wikipedia + news → sentiment.
+  const [fetchingAll, setFetchingAll] = useState(false);
+  const fetchAll = useCallback(async () => {
+    const jobs: Promise<unknown>[] = [];
+    if (PLATFORMS.some((p) => handles[p].trim())) jobs.push(discover());
+    if (name.trim()) {
+      jobs.push(fetchWikipedia());
+      jobs.push(fetchNews());
+    }
+    if (!jobs.length) return;
+    setFetchingAll(true);
+    try {
+      await Promise.allSettled(jobs);
+    } finally {
+      setFetchingAll(false);
+    }
+  }, [name, handles, discover, fetchWikipedia, fetchNews]);
 
   if (!loaded) {
     return (
@@ -543,8 +539,8 @@ export default function PricerPage() {
                 </button>
               </div>
               <p className="mt-1 text-[10px] text-zinc-500">
-                <span className="text-zinc-400">Fetch all</span>: followers (handles entered) + Wikipedia + news → sentiment.{" "}
-                <span className="text-emerald-500/80">Discover</span>: auto-resolves follower counts via your logged-in browser (local).
+                <span className="text-zinc-400">Fetch all</span>: Discover (followers) + Wikipedia + news → sentiment.{" "}
+                <span className="text-emerald-500/80">Discover</span>: paste a handle or profile URL in each row → resolves the exact follower counts via your logged-in browser (local).
               </p>
               {discoverMsg && <p className="mt-0.5 text-[10px] text-zinc-500">{discoverMsg}</p>}
             </div>
@@ -573,14 +569,18 @@ export default function PricerPage() {
                         <input
                           value={handles[s.platform]}
                           onChange={(e) => setHandles((h) => ({ ...h, [s.platform]: e.target.value }))}
-                          onKeyDown={(e) => { if (e.key === "Enter") fetchFollowers(s.platform); }}
-                          placeholder="@handle"
+                          onKeyDown={(e) => { if (e.key === "Enter") { if (s.platform === "youtube") fetchFollowers(s.platform); else discover(); } }}
+                          placeholder="@handle or profile URL"
                           className="flex-1 min-w-0 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500"
                         />
-                        <button onClick={() => fetchFollowers(s.platform)}
-                          className="shrink-0 text-[10px] rounded border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-2 py-1 text-zinc-300 transition-colors whitespace-nowrap">
-                          Fetch
-                        </button>
+                        {s.platform === "youtube" ? (
+                          <button onClick={() => fetchFollowers(s.platform)}
+                            className="shrink-0 text-[10px] rounded border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-2 py-1 text-zinc-300 transition-colors whitespace-nowrap">
+                            Fetch
+                          </button>
+                        ) : (
+                          <span className="shrink-0 text-[10px] text-emerald-600/70 whitespace-nowrap" title="Use the Discover button above">→ Discover</span>
+                        )}
                       </div>
                     ) : (
                       <span className="text-[10px] text-zinc-600 italic">no API — enter followers manually</span>
